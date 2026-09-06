@@ -1,141 +1,154 @@
-/** Coze / 扣子工作流 API 适配 */
+/** 扣子编程已部署工作流（https://<domain>/run） */
+
+export const DEFAULT_COZE_RUN_URL = 'https://sxk7m33ft7.coze.site/run';
 
 export type CozePublicConfig = {
   configured: boolean;
   hasToken: boolean;
-  workflowId: string;
-  botId: string;
-  appId: string;
-  textInputKey: string;
-  imageInputKey: string;
-  requireMainVisual: boolean;
-  applyImageToBackground: boolean;
+  runUrl: string;
+};
+
+export type CozeRunPayload = {
+  start_date: string;
+  end_date: string;
+  video_urls: string[];
+  raw_video_data: unknown[];
 };
 
 export function readCozeEnv() {
   const token = (process.env.COZE_API_TOKEN || process.env.COZE_PAT || '').trim();
-  const workflowId = (process.env.COZE_WORKFLOW_ID || '').trim();
-  const botId = (process.env.COZE_BOT_ID || '').trim();
-  const appId = (process.env.COZE_APP_ID || '').trim();
-  const apiBase = (process.env.COZE_API_BASE || 'https://api.coze.cn').replace(/\/$/, '');
-  const textInputKey = (process.env.COZE_TEXT_INPUT_KEY || 'input').trim();
-  const imageInputKey = (process.env.COZE_IMAGE_INPUT_KEY || 'image').trim();
-  const requireMainVisual = String(process.env.COZE_REQUIRE_MAIN_VISUAL || 'false').toLowerCase() === 'true';
-  const applyImageToBackground =
-    String(process.env.COZE_APPLY_IMAGE_TO_BACKGROUND ?? 'true').toLowerCase() !== 'false';
-  return {
-    token,
-    workflowId,
-    botId,
-    appId,
-    apiBase,
-    textInputKey,
-    imageInputKey,
-    requireMainVisual,
-    applyImageToBackground,
-  };
+  const runUrl = (process.env.COZE_RUN_URL || DEFAULT_COZE_RUN_URL).trim().replace(/\/$/, '');
+  return { token, runUrl };
 }
 
 export function publicCozeConfig(): CozePublicConfig {
   const e = readCozeEnv();
   return {
-    configured: Boolean(e.token && e.workflowId),
+    configured: Boolean(e.token),
     hasToken: Boolean(e.token),
-    workflowId: e.workflowId,
-    botId: e.botId,
-    appId: e.appId,
-    textInputKey: e.textInputKey,
-    imageInputKey: e.imageInputKey,
-    requireMainVisual: e.requireMainVisual,
-    applyImageToBackground: e.applyImageToBackground,
+    runUrl: e.runUrl,
   };
+}
+
+export function cozeServiceBase(runUrl: string): string {
+  return runUrl.replace(/\/(async_run|stream_run|run)\/?$/, '');
 }
 
 function authHeaders(token: string): HeadersInit {
   return {
     Authorization: `Bearer ${token}`,
+    'Content-Type': 'application/json',
   };
 }
 
-export function parseDataUrl(input: string): { mime: string; buffer: Buffer; ext: string } | null {
-  const m = String(input).match(/^data:([^;]+);base64,(.+)$/s);
-  if (!m) return null;
-  const mime = m[1] || 'image/png';
-  const buffer = Buffer.from(m[2], 'base64');
-  const ext = mime.includes('jpeg') || mime.includes('jpg') ? 'jpg' : mime.includes('webp') ? 'webp' : mime.includes('gif') ? 'gif' : 'png';
-  return { mime, buffer, ext };
-}
-
-export async function uploadCozeFile(opts: {
-  token: string;
-  apiBase: string;
-  buffer: Buffer;
-  filename: string;
-  mime: string;
-}): Promise<string> {
-  const form = new FormData();
-  form.append('file', new Blob([new Uint8Array(opts.buffer)], { type: opts.mime }), opts.filename);
-  const resp = await fetch(`${opts.apiBase}/v1/files/upload`, {
-    method: 'POST',
-    headers: authHeaders(opts.token),
-    body: form,
-    signal: AbortSignal.timeout(60_000),
-  });
-  const json = (await resp.json()) as {
-    code?: number;
-    msg?: string;
-    data?: { id?: string };
-  };
-  if (!resp.ok || json.code !== 0 || !json.data?.id) {
-    throw new Error(json.msg || `扣子文件上传失败（HTTP ${resp.status}）`);
+async function readJson(resp: Response): Promise<unknown> {
+  const text = await resp.text();
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
   }
-  return json.data.id;
 }
 
-export async function runCozeWorkflow(opts: {
-  token: string;
-  apiBase: string;
-  workflowId: string;
-  botId?: string;
-  appId?: string;
-  parameters: Record<string, unknown>;
-}): Promise<{ data: unknown; debugUrl?: string; executeId?: string; raw: unknown }> {
-  const body: Record<string, unknown> = {
-    workflow_id: opts.workflowId,
-    parameters: opts.parameters,
-  };
-  if (opts.botId) body.bot_id = opts.botId;
-  if (opts.appId) body.app_id = opts.appId;
-
-  const resp = await fetch(`${opts.apiBase}/v1/workflow/run`, {
-    method: 'POST',
-    headers: {
-      ...authHeaders(opts.token),
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(540_000),
-  });
-  const json = (await resp.json()) as {
-    code?: number;
-    msg?: string;
-    data?: unknown;
-    debug_url?: string;
-    execute_id?: string;
-  };
-  if (!resp.ok || (typeof json.code === 'number' && json.code !== 0)) {
-    throw new Error(json.msg || `扣子工作流执行失败（HTTP ${resp.status}）`);
+function errorFromBody(body: unknown, fallback: string): string {
+  if (typeof body === 'string' && body.trim()) return body.trim().slice(0, 2000);
+  if (body && typeof body === 'object') {
+    const o = body as Record<string, unknown>;
+    for (const key of ['error', 'msg', 'message', 'detail', 'error_message']) {
+      const v = o[key];
+      if (typeof v === 'string' && v.trim()) return v.trim();
+    }
   }
+  return fallback;
+}
+
+export function normalizePayload(input: Partial<CozeRunPayload>): CozeRunPayload {
+  const video_urls = (input.video_urls || [])
+    .map((u) => String(u || '').trim())
+    .filter((u) => u && u !== 'http://' && u !== 'https://');
+  const raw = Array.isArray(input.raw_video_data)
+    ? input.raw_video_data.filter((item) => item && typeof item === 'object' && Object.keys(item as object).length > 0)
+    : [];
   return {
-    data: json.data,
-    debugUrl: json.debug_url,
-    executeId: json.execute_id,
-    raw: json,
+    start_date: String(input.start_date || '').trim(),
+    end_date: String(input.end_date || '').trim(),
+    video_urls,
+    raw_video_data: raw,
   };
 }
 
-const IMAGE_URL_RE =
-  /^https?:\/\/.+\.(png|jpe?g|webp|gif|bmp|svg)(\?.*)?$/i;
+async function postJson(url: string, token: string, body: unknown, timeoutMs: number): Promise<{ status: number; data: unknown }> {
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  const data = await readJson(resp);
+  return { status: resp.status, data };
+}
+
+async function pollAsyncTask(opts: {
+  base: string;
+  token: string;
+  taskId: string;
+}): Promise<unknown> {
+  const deadline = Date.now() + 12 * 60_000;
+  while (Date.now() < deadline) {
+    const resp = await fetch(`${opts.base}/task/${opts.taskId}`, {
+      headers: { Authorization: `Bearer ${opts.token}` },
+      signal: AbortSignal.timeout(30_000),
+    });
+    const data = (await readJson(resp)) as {
+      status?: string;
+      result?: unknown;
+      error?: string | null;
+    } | null;
+    if (!resp.ok) {
+      throw new Error(errorFromBody(data, `查询异步任务失败（HTTP ${resp.status}）`));
+    }
+    const status = String(data?.status || '');
+    if (status === 'completed') return data?.result ?? data;
+    if (status === 'failed' || status === 'timeout') {
+      throw new Error(data?.error || `扣子工作流${status === 'timeout' ? '超时' : '失败'}`);
+    }
+    await new Promise((r) => setTimeout(r, 2500));
+  }
+  throw new Error('扣子异步任务等待超时，请稍后在部署页查看运行记录');
+}
+
+export async function runPublishedWorkflow(opts: {
+  token: string;
+  runUrl: string;
+  payload: CozeRunPayload;
+}): Promise<unknown> {
+  const base = cozeServiceBase(opts.runUrl);
+  try {
+    const { status, data } = await postJson(`${base}/run`, opts.token, opts.payload, 280_000);
+    if (status === 401 || status === 403) {
+      throw new Error('扣子 Token 无效或无权限，请检查 COZE_API_TOKEN');
+    }
+    if (status >= 400) {
+      throw new Error(errorFromBody(data, `扣子工作流失败（HTTP ${status}）`));
+    }
+    return data;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const timedOut = err instanceof Error && (err.name === 'TimeoutError' || /timeout|aborted/i.test(msg));
+    if (!timedOut) throw err;
+
+    const asyncPost = await postJson(`${base}/async_run`, opts.token, opts.payload, 60_000);
+    if (asyncPost.status >= 400) {
+      throw new Error(`同步接口超时，异步重试失败：${errorFromBody(asyncPost.data, `HTTP ${asyncPost.status}`)}`);
+    }
+    const taskId = (asyncPost.data as { task_id?: string } | null)?.task_id;
+    if (!taskId) throw new Error('同步超时且异步接口未返回 task_id');
+    return pollAsyncTask({ base, token: opts.token, taskId });
+  }
+}
+
+const IMAGE_URL_RE = /^https?:\/\/.+\.(png|jpe?g|webp|gif|bmp|svg)(\?.*)?$/i;
 const HOST_HINT_RE = /coze|byteimg|imagex|tos-cn|volces|cdn/i;
 
 export function collectCozeMedia(data: unknown): { text: string; imageUrls: string[] } {
@@ -159,14 +172,14 @@ export function collectCozeMedia(data: unknown): { text: string; imageUrls: stri
     return false;
   };
 
-  const walk = (v: unknown, key?: string) => {
-    if (v == null) return;
+  const walk = (v: unknown, key?: string, depth = 0) => {
+    if (v == null || depth > 8) return;
     if (typeof v === 'string') {
       const trimmed = v.trim();
       if (!trimmed) return;
       if ((trimmed.startsWith('{') || trimmed.startsWith('[')) && trimmed.length < 2_000_000) {
         try {
-          walk(JSON.parse(trimmed), key);
+          walk(JSON.parse(trimmed), key, depth + 1);
           return;
         } catch {
           /* keep as text */
@@ -176,7 +189,7 @@ export function collectCozeMedia(data: unknown): { text: string; imageUrls: stri
         addImage(trimmed);
         return;
       }
-      if (trimmed.length <= 8000) textParts.push(trimmed);
+      if (trimmed.length <= 4000 && !key?.includes('schema')) textParts.push(trimmed);
       return;
     }
     if (typeof v === 'number' || typeof v === 'boolean') {
@@ -184,19 +197,16 @@ export function collectCozeMedia(data: unknown): { text: string; imageUrls: stri
       return;
     }
     if (Array.isArray(v)) {
-      v.forEach((item) => walk(item, key));
+      v.forEach((item) => walk(item, key, depth + 1));
       return;
     }
     if (typeof v === 'object') {
-      for (const [k, val] of Object.entries(v as Record<string, unknown>)) walk(val, k);
+      for (const [k, val] of Object.entries(v as Record<string, unknown>)) walk(val, k, depth + 1);
     }
   };
 
   walk(data);
-  return {
-    text: uniqueJoin(textParts),
-    imageUrls,
-  };
+  return { text: uniqueJoin(textParts).slice(0, 12000), imageUrls };
 }
 
 function uniqueJoin(parts: string[]): string {
@@ -208,6 +218,93 @@ function uniqueJoin(parts: string[]): string {
     out.push(p);
   }
   return out.join('\n').trim();
+}
+
+export type CozeExcelRow = {
+  account?: string;
+  nickname?: string;
+  title: string;
+  keywords: string;
+  coverFileName: string;
+  qrFileName: string;
+  avatarFileName?: string;
+  exposureText?: string;
+  engagementText?: string;
+  videoUrl?: string;
+};
+
+function strField(obj: Record<string, unknown>, names: string[]): string {
+  const lower = Object.fromEntries(Object.entries(obj).map(([k, v]) => [k.replace(/\s/g, '').toLowerCase(), v]));
+  for (const name of names) {
+    const v = obj[name] ?? lower[name.toLowerCase()];
+    if (v == null) continue;
+    const s = String(v).trim();
+    if (s) return s;
+  }
+  return '';
+}
+
+function objectToExcelRow(item: Record<string, unknown>): CozeExcelRow | null {
+  const title = strField(item, ['title', '文案标题', '标题', '文案', 'name', 'video_title', 'desc', 'caption']);
+  const keywords = strField(item, ['keywords', '内容关键词', '视频关键词', '关键词', '话题', 'tags']);
+  const account = strField(item, ['account', '账号', '账户']);
+  const nickname = strField(item, ['nickname', '昵称', '账号昵称', 'author']);
+  const videoUrl = strField(item, ['videoUrl', 'video_url', '视频链接', 'url', 'link', 'share_url']);
+  const exposureText = strField(item, ['exposureText', 'exposure', '曝光量', '曝光', 'play_count', 'vv']);
+  const engagementText = strField(item, ['engagementText', 'engagement', '互动量', '互动']);
+  const coverFileName = strField(item, ['coverFileName', 'cover', '封面', 'cover_url']);
+  if (!title && !videoUrl && !account && !nickname) return null;
+  return {
+    title: title || nickname || account || '未命名内容',
+    keywords,
+    coverFileName,
+    qrFileName: strField(item, ['qrFileName', 'qr', '二维码']),
+    avatarFileName: strField(item, ['avatarFileName', 'avatar', '头像']),
+    videoUrl,
+    account,
+    nickname: nickname || account,
+    exposureText,
+    engagementText,
+  };
+}
+
+export function excelRowsFromCoze(data: unknown): CozeExcelRow[] {
+  const arrays: unknown[][] = [];
+  const visit = (v: unknown, depth = 0) => {
+    if (v == null || depth > 6) return;
+    if (typeof v === 'string' && (v.startsWith('{') || v.startsWith('['))) {
+      try {
+        visit(JSON.parse(v), depth + 1);
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
+    if (Array.isArray(v)) {
+      if (v.length && v.every((x) => x && typeof x === 'object' && !Array.isArray(x))) arrays.push(v);
+      else v.forEach((item) => visit(item, depth + 1));
+      return;
+    }
+    if (typeof v === 'object') {
+      for (const val of Object.values(v as Record<string, unknown>)) visit(val, depth + 1);
+    }
+  };
+  visit(data);
+
+  const rows: CozeExcelRow[] = [];
+  const seen = new Set<string>();
+  for (const arr of arrays) {
+    for (const item of arr) {
+      if (!item || typeof item !== 'object') continue;
+      const row = objectToExcelRow(item as Record<string, unknown>);
+      if (!row) continue;
+      const key = `${row.title}|${row.videoUrl}|${row.account}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      rows.push(row);
+    }
+  }
+  return rows.slice(0, 50);
 }
 
 export async function fetchAsDataUrl(url: string): Promise<string> {

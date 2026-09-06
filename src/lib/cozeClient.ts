@@ -1,13 +1,20 @@
 export type CozePublicConfig = {
   configured: boolean;
   hasToken: boolean;
-  workflowId: string;
-  botId: string;
-  appId: string;
-  textInputKey: string;
-  imageInputKey: string;
-  requireMainVisual: boolean;
-  applyImageToBackground: boolean;
+  runUrl: string;
+};
+
+export type CozeExcelRow = {
+  account?: string;
+  nickname?: string;
+  title: string;
+  keywords: string;
+  coverFileName: string;
+  qrFileName: string;
+  avatarFileName?: string;
+  exposureText?: string;
+  engagementText?: string;
+  videoUrl?: string;
 };
 
 export type CozeRunResult = {
@@ -15,7 +22,8 @@ export type CozeRunResult = {
   text?: string;
   imageDataUrl?: string | null;
   imageUrls?: string[];
-  debugUrl?: string;
+  rows?: CozeExcelRow[];
+  data?: unknown;
   error?: string;
 };
 
@@ -28,25 +36,27 @@ export async function fetchCozeConfig(): Promise<CozePublicConfig> {
 }
 
 export async function runCozeWorkflow(opts: {
-  prompt?: string;
-  imageBase64?: string;
-  extraParameters?: Record<string, unknown>;
-  onProgress?: (p: number, msg: string) => void;
+  start_date: string;
+  end_date: string;
+  video_urls: string[];
+  raw_video_data?: unknown[];
+  onProgress?: (msg: string) => void;
 }): Promise<CozeRunResult> {
-  opts.onProgress?.(0.15, '正在调用扣子工作流…');
+  opts.onProgress?.('正在调用扣子工作流…');
   const resp = await fetch('/api/coze/run', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      prompt: opts.prompt || '',
-      imageBase64: opts.imageBase64,
-      extraParameters: opts.extraParameters,
+      start_date: opts.start_date,
+      end_date: opts.end_date,
+      video_urls: opts.video_urls,
+      raw_video_data: opts.raw_video_data || [],
     }),
   });
   const json = (await resp.json()) as CozeRunResult & { error?: string };
   if (!resp.ok || json.error) {
     throw new Error(json.error || `扣子工作流失败（HTTP ${resp.status}）`);
   }
-  opts.onProgress?.(1, '工作流已完成');
+  opts.onProgress?.('工作流已完成');
   return json;
 }

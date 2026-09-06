@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type DragEvent, type ReactNode } from 'react';
 import { autoMatchAssetsByOrder, fileToDataUrl, matchAsset, parseExcelFile } from '@/lib/excel';
 import { artboardExportInput, exportPng, exportPsd, exportSelectedLayerPng, resolveExportScale } from '@/lib/export';
-import { fetchCozeConfig, runCozeWorkflow, type CozePublicConfig } from '@/lib/cozeClient';
 import { generateBackground } from '@/lib/liblibClient';
+import { CozeWorkflowPanel } from './CozeWorkflowPanel';
 import { ARTBOARD_BASE_HEIGHT, ARTBOARD_WIDTH, BRUSH, CARD_STYLE, EXPORT_PNG_DPI, EXPORT_SCALES, MAX_CARDS, TYPOGRAPHY } from '@/lib/constants';
 import { usePosterStore } from '@/store/usePosterStore';
 import type { ImportDraftRow, TextColor } from '@/lib/types';
@@ -97,12 +97,6 @@ export function SidePanel({ step }: { step: number }) {
   const pendingSlotRef = useRef<{ cardId: string; slot: 'cover' | 'qr' | 'avatar' } | null>(null);
   const [selectedRowIds, setSelectedRowIds] = useState<string[]>([]);
   const dragRowId = useRef<string | null>(null);
-  const [cozeConfig, setCozeConfig] = useState<CozePublicConfig | null>(null);
-  const [cozePrompt, setCozePrompt] = useState('');
-  const [cozeAttachVisual, setCozeAttachVisual] = useState(true);
-  const [cozeText, setCozeText] = useState('');
-  const [cozeDebugUrl, setCozeDebugUrl] = useState('');
-  const [cozeRunning, setCozeRunning] = useState(false);
 
   const brush = usePosterStore((s) => s.brush);
   const textColor = usePosterStore((s) => s.textColor);
@@ -150,12 +144,6 @@ export function SidePanel({ step }: { step: number }) {
     usePosterStore.getState().setReplaceTarget({ cardId, slot });
     slotUploadRef.current?.click();
   };
-
-  useEffect(() => {
-    void fetchCozeConfig()
-      .then(setCozeConfig)
-      .catch(() => setCozeConfig(null));
-  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -291,36 +279,6 @@ export function SidePanel({ step }: { step: number }) {
     img.src = url;
   };
 
-  const onRunCoze = async () => {
-    const store = usePosterStore.getState();
-    if (cozeConfig?.requireMainVisual && !store.mainVisualDataUrl) {
-      store.setStatus('请先上传主视觉');
-      return;
-    }
-    setCozeRunning(true);
-    store.setStatus('正在调用扣子工作流…');
-    try {
-      const result = await runCozeWorkflow({
-        prompt: cozePrompt,
-        imageBase64: cozeAttachVisual ? store.mainVisualDataUrl || undefined : undefined,
-        onProgress: (_p, msg) => store.setStatus(msg),
-      });
-      if (result.imageDataUrl) {
-        store.setAiBackground(result.imageDataUrl);
-        store.clearSelection();
-      }
-      setCozeText(result.text || '');
-      setCozeDebugUrl(result.debugUrl || '');
-      store.setStatus(
-        result.imageDataUrl ? '扣子工作流已完成，结果已写入背景图层' : '扣子工作流已完成',
-      );
-    } catch (err) {
-      store.setStatus(err instanceof Error ? err.message : String(err));
-    } finally {
-      setCozeRunning(false);
-    }
-  };
-
   const onGenerateBg = async () => {
     const store = usePosterStore.getState();
     if (!store.mainVisualDataUrl) {
@@ -454,7 +412,7 @@ export function SidePanel({ step }: { step: number }) {
             title="② 背景生成（主色上下渐变）"
             hint="仅使用主视觉图中真实颜色：有背景则复刻上下色带，否则取最显著主色做竖向渐变，不引入图外颜色。"
           >
-            <button type="button" className="btn-primary" disabled={generating || cozeRunning} onClick={onGenerateBg}>
+            <button type="button" className="btn-primary" disabled={generating} onClick={onGenerateBg}>
               {generating ? `生成中 ${Math.round(generateProgress * 100)}%` : '生成融合背景'}
             </button>
             {generating && (
@@ -464,62 +422,6 @@ export function SidePanel({ step }: { step: number }) {
             )}
             {backgroundDataUrl && !generating && (
               <p className="muted tiny">AI 背景已写入图层，可在右侧调整顺序或隐藏</p>
-            )}
-          </Section>
-
-          <Section
-            title="扣子工作流"
-            hint="点击按钮调用已发布的 Coze 工作流。令牌与 Workflow ID 写在服务端 .env，不会暴露到浏览器。"
-          >
-            {cozeConfig && !cozeConfig.configured && (
-              <div className="info-box muted tiny">
-                尚未配置扣子。请在 <span className="mono">.env</span> 填写{' '}
-                <span className="mono">COZE_API_TOKEN</span> 与{' '}
-                <span className="mono">COZE_WORKFLOW_ID</span>
-                ，并确认工作流已发布为 API。
-              </div>
-            )}
-            {cozeConfig?.configured && (
-              <p className="muted tiny">
-                工作流 ID：<span className="mono">{cozeConfig.workflowId}</span>
-              </p>
-            )}
-            <label className="field">
-              <span className="field-label">
-                <span>附加说明</span>
-                <span className="mono">{cozeConfig?.textInputKey || 'input'}</span>
-              </span>
-              <textarea
-                className="coze-prompt"
-                rows={3}
-                placeholder="会作为工作流开始节点的文本输入（可空）"
-                value={cozePrompt}
-                onChange={(e) => setCozePrompt(e.target.value)}
-              />
-            </label>
-            <label className="coze-check">
-              <input
-                type="checkbox"
-                checked={cozeAttachVisual}
-                onChange={(e) => setCozeAttachVisual(e.target.checked)}
-              />
-              附带当前主视觉（上传到扣子后作为图片参数）
-            </label>
-            <button
-              type="button"
-              className="btn-primary"
-              disabled={generating || cozeRunning}
-              onClick={() => void onRunCoze()}
-            >
-              {cozeRunning ? '运行中…' : '运行工作流'}
-            </button>
-            {cozeText && (
-              <pre className="coze-result">{cozeText}</pre>
-            )}
-            {cozeDebugUrl && (
-              <a className="coze-debug" href={cozeDebugUrl} target="_blank" rel="noreferrer">
-                打开扣子调试页
-              </a>
             )}
           </Section>
 
@@ -607,7 +509,9 @@ export function SidePanel({ step }: { step: number }) {
       )}
 
       {step === 4 && (
-        <Section
+        <>
+          <CozeWorkflowPanel />
+          <Section
           title="④ 数据导入"
           hint="支持新媒体周报表（自动跳过「第xx期」标题行）。按「账号」分组；曝光(w)/互动中的「/」视为无数据；视频链接可从分享文案中提取。封面/头像/二维码：双击缩略图上传。"
         >
@@ -985,6 +889,7 @@ export function SidePanel({ step }: { step: number }) {
             </p>
           </div>
         </Section>
+        </>
       )}
 
       {step === 5 && (

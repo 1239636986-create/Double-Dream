@@ -30,23 +30,24 @@ API 代理默认 http://127.0.0.1:8787
 
 ## 接入扣子工作流
 
-左侧「背景生成」步骤中有一个与「生成融合背景」同款的 **运行工作流** 按钮。点击后由本机服务端调用 [执行工作流 API](https://docs.coze.cn/developer_guides_workflow_run)，PAT 不会下发到浏览器。
+首页「数据导入」步骤顶部有与「生成融合背景」同款的 **运行工作流** 按钮，对接已部署地址：
 
-请提供（或自行写入 `.env`）：
+`POST https://sxk7m33ft7.coze.site/run`
 
-| 需要提供的内容 | 怎么拿 | 是否必填 |
-| --- | --- | --- |
-| `COZE_API_TOKEN`（个人访问令牌 PAT） | 扣子开放平台 → 授权 → [个人访问令牌](https://www.coze.cn/open/oauth/pats)，开通 `run` 权限，并授权工作流所在空间 | 必填 |
-| `COZE_WORKFLOW_ID` | 工作流编排页 URL 中 `workflow_id=` 后面的数字 | 必填 |
-| 工作流已发布为 API | 编排页右上角「发布」；未发布会报错 4200 | 必填 |
-| 开始节点输入参数名 | 开始节点里的字段名，例如 `input`、`image` | 建议提供，便于对齐 |
-| 结束节点输出字段 | 输出是文案、图片 URL，还是两者都有 | 建议提供 |
-| `COZE_BOT_ID` | 智能体开发页 URL 中 `bot=` 后的数字。含数据库/变量节点时需要 | 按工作流而定 |
-| `COZE_APP_ID` | 扣子应用 URL 中 `project-ide=` 后的数字。工作流在应用内时需要 | 按工作流而定 |
+请求体与你在扣子部署页复制的 Python 示例一致：
 
-默认把文本写入 `input`、把当前主视觉上传后写入 `image`（`{"file_id":"..."}`）。若你的开始节点字段名不同，请改 `COZE_TEXT_INPUT_KEY` / `COZE_IMAGE_INPUT_KEY`。
+```json
+{
+  "start_date": "2026-09-01",
+  "end_date": "2026-09-06",
+  "video_urls": ["https://v.douyin.com/..."],
+  "raw_video_data": []
+}
+```
 
-若结束节点输出图片 URL，工具会把它写入「AI 背景」图层；纯文本会显示在按钮下方。
+Token 只放服务端 `.env` 的 `COZE_API_TOKEN`（对应示例里 `Bearer <YOUR_TOKEN>`），不要提交到仓库、也不要贴到聊天里。
+
+若工作流输出是账号/标题/链接等列表，会自动写入画板卡片；若含图片 URL，会写入 AI 背景图层。同步超过约 5 分钟时会自动改走 `/async_run` 并轮询任务。
 
 ## 画板默认（PRD）
 

@@ -6,12 +6,12 @@ import dotenv from 'dotenv';
 import express from 'express';
 import {
   collectCozeMedia,
+  excelRowsFromCoze,
   fetchAsDataUrl,
-  parseDataUrl,
+  normalizePayload,
   publicCozeConfig,
   readCozeEnv,
-  runCozeWorkflow,
-  uploadCozeFile,
+  runPublishedWorkflow,
 } from './coze';
 
 dotenv.config();
@@ -61,64 +61,29 @@ app.post('/api/coze/run', async (req, res) => {
   const env = readCozeEnv();
   if (!env.token) {
     res.status(500).json({
-      error: '未配置扣子访问令牌。请在 .env 中填写 COZE_API_TOKEN（个人访问令牌 PAT）。',
-    });
-    return;
-  }
-  if (!env.workflowId) {
-    res.status(500).json({
-      error: '未配置工作流 ID。请在 .env 中填写 COZE_WORKFLOW_ID。',
+      error: '未配置扣子 API Token。请在 .env 中填写 COZE_API_TOKEN（部署页「管理 API Token」生成，不要把 Token 写进前端）。',
     });
     return;
   }
 
   try {
-    const {
-      prompt = '',
-      imageBase64,
-      extraParameters,
-    } = req.body as {
-      prompt?: string;
-      imageBase64?: string;
-      extraParameters?: Record<string, unknown>;
-    };
-
-    const parameters: Record<string, unknown> = { ...(extraParameters || {}) };
-    if (env.textInputKey && String(prompt || '').trim()) {
-      parameters[env.textInputKey] = String(prompt).trim();
-    }
-
-    if (imageBase64 && env.imageInputKey) {
-      const parsed = parseDataUrl(imageBase64);
-      if (!parsed) {
-        res.status(400).json({ error: '主视觉不是有效的图片 data URL' });
-        return;
-      }
-      const fileId = await uploadCozeFile({
-        token: env.token,
-        apiBase: env.apiBase,
-        buffer: parsed.buffer,
-        filename: `main-visual.${parsed.ext}`,
-        mime: parsed.mime,
-      });
-      parameters[env.imageInputKey] = JSON.stringify({ file_id: fileId });
-    } else if (env.requireMainVisual && !imageBase64) {
-      res.status(400).json({ error: '请先上传主视觉，再运行扣子工作流' });
-      return;
-    }
-
-    const result = await runCozeWorkflow({
-      token: env.token,
-      apiBase: env.apiBase,
-      workflowId: env.workflowId,
-      botId: env.botId || undefined,
-      appId: env.appId || undefined,
-      parameters,
+    const payload = normalizePayload({
+      start_date: req.body?.start_date,
+      end_date: req.body?.end_date,
+      video_urls: req.body?.video_urls,
+      raw_video_data: req.body?.raw_video_data,
     });
 
-    const media = collectCozeMedia(result.data);
+    const data = await runPublishedWorkflow({
+      token: env.token,
+      runUrl: env.runUrl,
+      payload,
+    });
+
+    const media = collectCozeMedia(data);
+    const rows = excelRowsFromCoze(data);
     let imageDataUrl: string | null = null;
-    if (env.applyImageToBackground && media.imageUrls[0]) {
+    if (media.imageUrls[0]) {
       try {
         imageDataUrl = await fetchAsDataUrl(media.imageUrls[0]);
       } catch (err) {
@@ -131,7 +96,8 @@ app.post('/api/coze/run', async (req, res) => {
       text: media.text,
       imageDataUrl,
       imageUrls: media.imageUrls,
-      debugUrl: result.debugUrl,
+      rows,
+      data,
     });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });

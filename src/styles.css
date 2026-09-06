@@ -394,6 +394,17 @@ textarea {
   color: var(--primary);
 }
 
+.side-panel input[type='date'],
+.side-panel input[type='text'] {
+  width: 100%;
+  border: 1px solid var(--border);
+  background: oklch(0 0 0 / 0.22);
+  color: var(--fg);
+  border-radius: 8px;
+  padding: 7px 8px;
+  font-size: 12px;
+}
+
 .info-box {
   border: 1px solid var(--border);
   border-radius: 8px;
