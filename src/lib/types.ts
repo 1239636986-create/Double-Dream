@@ -45,6 +45,9 @@ export interface ExcelRow {
   exposureText?: string;
   engagementText?: string;
   videoUrl?: string;
+  coverDataUrl?: string;
+  qrDataUrl?: string;
+  avatarDataUrl?: string;
 }
 
 /** 数据导入草稿行（可编辑，驱动画板卡片） */

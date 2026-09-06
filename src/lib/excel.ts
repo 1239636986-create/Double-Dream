@@ -4,29 +4,41 @@ import type { ExcelRow } from './types';
 
 const HEADER_MAP: Record<string, keyof ExcelRow> = {
   账号: 'account',
+  所属账号: 'account',
   昵称: 'nickname',
   账号昵称: 'nickname',
   文案标题: 'title',
+  视频标题: 'title',
   标题: 'title',
   文案: 'title',
   内容关键词: 'keywords',
   视频关键词: 'keywords',
+  核心关键词: 'keywords',
   关键词: 'keywords',
   话题: 'keywords',
   封面图: 'coverFileName',
+  封面图url: 'coverFileName',
+  封面图URL: 'coverFileName',
   封面文件名: 'coverFileName',
   封面: 'coverFileName',
   二维码: 'qrFileName',
   二维码文件名: 'qrFileName',
+  活码: 'qrFileName',
+  动态活码: 'qrFileName',
+  动态活码url: 'qrFileName',
+  动态活码URL: 'qrFileName',
   头像: 'avatarFileName',
   账号头像: 'avatarFileName',
   曝光量: 'exposureText',
   曝光w: 'exposureText',
   '曝光(w)': 'exposureText',
   曝光: 'exposureText',
+  播放量: 'exposureText',
   互动量: 'engagementText',
   互动: 'engagementText',
+  点赞量: 'engagementText',
   视频链接: 'videoUrl',
+  视频原始链接: 'videoUrl',
   链接: 'videoUrl',
 };
 
@@ -48,12 +60,12 @@ function mapHeaderCell(h: unknown): keyof ExcelRow | undefined {
     if (/标题|文案/.test(nk) && !/关键|键/.test(nk)) mapped = 'title';
     else if (/关键词|话题|标签/.test(nk)) mapped = 'keywords';
     else if (/封面/.test(nk)) mapped = 'coverFileName';
-    else if (/二维码|qr/i.test(nk)) mapped = 'qrFileName';
+    else if (/二维码|qr|活码/i.test(nk)) mapped = 'qrFileName';
     else if (/头像/.test(nk)) mapped = 'avatarFileName';
     else if (/昵称/.test(nk)) mapped = 'nickname';
     else if (/账号|账户/.test(nk)) mapped = 'account';
-    else if (/曝光/.test(nk)) mapped = 'exposureText';
-    else if (/互动/.test(nk)) mapped = 'engagementText';
+    else if (/曝光|播放/.test(nk)) mapped = 'exposureText';
+    else if (/互动|点赞/.test(nk)) mapped = 'engagementText';
     else if (/链接|url|link|douyin|抖音/i.test(nk)) mapped = 'videoUrl';
   }
   return mapped;

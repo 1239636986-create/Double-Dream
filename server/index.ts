@@ -4,6 +4,19 @@ import cors from 'cors';
 import crypto from 'node:crypto';
 import dotenv from 'dotenv';
 import express from 'express';
+import {
+  collectCozeMedia,
+  excelRowsFromCoze,
+  extractExcelUrl,
+  fetchAsDataUrl,
+  fetchExcelBuffer,
+  hydrateRowImages,
+  normalizePayload,
+  publicCozeConfig,
+  readCozeEnv,
+  runPublishedWorkflow,
+} from './coze';
+import { parseExcel } from '../src/lib/excel';
 
 dotenv.config();
 
@@ -35,11 +48,80 @@ function stripDataUrl(input: string) {
 }
 
 app.get('/api/health', (_req, res) => {
+  const coze = publicCozeConfig();
   res.json({
     ok: true,
     hasLiblibKeys: Boolean(ACCESS_KEY && SECRET_KEY),
+    hasCoze: coze.configured,
     providers: ['pollinations', 'procedural', ...(ACCESS_KEY && SECRET_KEY ? ['liblib'] : [])],
   });
+});
+
+app.get('/api/coze/config', (_req, res) => {
+  res.json(publicCozeConfig());
+});
+
+app.post('/api/coze/run', async (req, res) => {
+  const env = readCozeEnv();
+  if (!env.token) {
+    res.status(500).json({
+      error: '未配置扣子 API Token。请在 .env 中填写 COZE_API_TOKEN（部署页「管理 API Token」生成，不要把 Token 写进前端）。',
+    });
+    return;
+  }
+
+  try {
+    const payload = normalizePayload({
+      start_date: req.body?.start_date,
+      end_date: req.body?.end_date,
+      video_urls: req.body?.video_urls,
+      raw_video_data: req.body?.raw_video_data,
+    });
+
+    const data = await runPublishedWorkflow({
+      token: env.token,
+      runUrl: env.runUrl,
+      payload,
+    });
+
+    const media = collectCozeMedia(data);
+    let rows = excelRowsFromCoze(data);
+    const excelUrl = extractExcelUrl(data);
+    let excelWarning = '';
+    if (excelUrl) {
+      const buf = await fetchExcelBuffer(excelUrl);
+      const parsed = parseExcel(buf);
+      excelWarning = parsed.warning || '';
+      if (parsed.rows.length) rows = parsed.rows;
+    }
+    if (rows.length) {
+      rows = await hydrateRowImages(rows);
+    }
+    let imageDataUrl: string | null = null;
+    if (media.imageUrls[0]) {
+      try {
+        imageDataUrl = await fetchAsDataUrl(media.imageUrls[0]);
+      } catch (err) {
+        console.warn('[coze] image fetch failed', err);
+      }
+    }
+
+    res.json({
+      ok: true,
+      text: rows.length
+        ? `已从工作流 Excel 导入 ${rows.length} 行${excelWarning ? `（${excelWarning}）` : ''}`
+        : excelUrl
+          ? `工作流已完成并生成 Excel，但没有数据行。请填写视频链接后再运行。${excelWarning ? ` ${excelWarning}` : ''}`
+          : media.text,
+      imageDataUrl,
+      imageUrls: media.imageUrls,
+      excelUrl,
+      rows,
+      data,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
 });
 
 /** Pollinations FLUX：免密钥，按主视觉配色写 prompt */
@@ -272,7 +354,11 @@ app.get('/api/proxy-image', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`[poster-tool] API proxy http://127.0.0.1:${PORT}`);
-  console.log('[poster-tool] 默认生图：Pollinations FLUX（免密钥）+ 本地程序化回退');
-});
+export { app };
+
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`[poster-tool] API proxy http://127.0.0.1:${PORT}`);
+    console.log('[poster-tool] 默认生图：Pollinations FLUX（免密钥）+ 本地程序化回退');
+  });
+}

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type DragEvent, type ReactNode } from 'rea
 import { autoMatchAssetsByOrder, fileToDataUrl, matchAsset, parseExcelFile } from '@/lib/excel';
 import { artboardExportInput, exportPng, exportPsd, exportSelectedLayerPng, resolveExportScale } from '@/lib/export';
 import { generateBackground } from '@/lib/liblibClient';
+import { CozeWorkflowPanel } from './CozeWorkflowPanel';
 import { ARTBOARD_BASE_HEIGHT, ARTBOARD_WIDTH, BRUSH, CARD_STYLE, EXPORT_PNG_DPI, EXPORT_SCALES, MAX_CARDS, TYPOGRAPHY } from '@/lib/constants';
 import { usePosterStore } from '@/store/usePosterStore';
 import type { ImportDraftRow, TextColor } from '@/lib/types';
@@ -508,7 +509,9 @@ export function SidePanel({ step }: { step: number }) {
       )}
 
       {step === 4 && (
-        <Section
+        <>
+          <CozeWorkflowPanel />
+          <Section
           title="④ 数据导入"
           hint="支持新媒体周报表（自动跳过「第xx期」标题行）。按「账号」分组；曝光(w)/互动中的「/」视为无数据；视频链接可从分享文案中提取。封面/头像/二维码：双击缩略图上传。"
         >
@@ -886,6 +889,7 @@ export function SidePanel({ step }: { step: number }) {
             </p>
           </div>
         </Section>
+        </>
       )}
 
       {step === 5 && (

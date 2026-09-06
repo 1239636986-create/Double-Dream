@@ -1288,14 +1288,14 @@ export const usePosterStore = create<PosterStore>((set, get) => {
             coverFileName: row.coverFileName,
             qrFileName: row.qrFileName,
             avatarFileName: row.avatarFileName,
-            coverDataUrl: '',
-            qrDataUrl: '',
-            avatarDataUrl: '',
+            coverDataUrl: row.coverDataUrl || '',
+            qrDataUrl: row.qrDataUrl || '',
+            avatarDataUrl: row.avatarDataUrl || '',
             videoUrl: row.videoUrl,
             account: row.account,
             nickname: row.nickname || row.account,
             showMetrics: hasMetrics,
-            showAvatar: hasAvatar,
+            showAvatar: hasAvatar || Boolean(row.avatarDataUrl),
             exposureText: row.exposureText || '',
             engagementText: row.engagementText || '',
           };
@@ -1304,14 +1304,16 @@ export const usePosterStore = create<PosterStore>((set, get) => {
         const built = rebuildCards(drafts, groups);
         const accountCount = groups.length;
         const hasAccount = drafts.some((d) => (d.account || '').trim());
+        const hasCover = drafts.some((d) => d.coverDataUrl);
+        const extra = hasCover ? '' : '；请上传素材匹配封面/二维码';
         set({
           importDrafts: drafts,
           ...built,
           selectedCardId: null,
           seeded: true,
           statusMessage: hasAccount
-            ? `已识别 ${drafts.length} 行，按账号分成 ${accountCount} 组；请上传素材匹配封面/二维码`
-            : `已识别 ${drafts.length} 行文案（无账号列，单组）；请上传素材匹配封面/二维码`,
+            ? `已识别 ${drafts.length} 行，按账号分成 ${accountCount} 组${extra}`
+            : `已识别 ${drafts.length} 行文案（无账号列，单组）${extra}`,
         });
       });
     },
