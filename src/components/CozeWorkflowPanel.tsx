@@ -29,9 +29,14 @@ export function CozeWorkflowPanel() {
   const [resultText, setResultText] = useState('');
 
   useEffect(() => {
-    void fetchCozeConfig()
-      .then(setConfig)
-      .catch(() => setConfig(null));
+    const load = () => {
+      void fetchCozeConfig()
+        .then(setConfig)
+        .catch(() => setConfig(null));
+    };
+    load();
+    window.addEventListener('focus', load);
+    return () => window.removeEventListener('focus', load);
   }, []);
 
   const onRun = async () => {
@@ -95,6 +100,9 @@ export function CozeWorkflowPanel() {
             尚未配置 Token。把部署页生成的 API Token 写入本机 <span className="mono">.env</span> 的{' '}
             <span className="mono">COZE_API_TOKEN</span>（不要贴到页面或仓库里）。
           </div>
+        )}
+        {config?.configured && (
+          <p className="muted tiny">已连接扣子 API，点击按钮即可运行工作流。</p>
         )}
         <div className="row">
           <label className="field">

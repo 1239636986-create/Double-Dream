@@ -1,4 +1,4 @@
-import { collectCozeMedia, excelRowsFromCoze, normalizePayload } from './coze';
+import { collectCozeMedia, excelRowsFromCoze, extractExcelUrl, normalizePayload } from './coze';
 
 function assert(cond: unknown, msg: string) {
   if (!cond) throw new Error(msg);
@@ -26,5 +26,11 @@ const payload = normalizePayload({
 });
 assert(payload.video_urls.length === 1, String(payload.video_urls));
 assert(payload.raw_video_data.length === 1, String(payload.raw_video_data.length));
+
+const excel = extractExcelUrl({
+  excel_url: 'https://example.com/a.xlsx?sign=1',
+  run_id: 'abc',
+});
+assert(excel?.includes('a.xlsx'), String(excel));
 
 console.log('coze parser ok');

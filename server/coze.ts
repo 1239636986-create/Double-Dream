@@ -163,9 +163,11 @@ export function collectCozeMedia(data: unknown): { text: string; imageUrls: stri
   };
 
   const looksLikeImage = (s: string, key?: string) => {
+    if (/\.(xlsx|xls|csv)(\?|$)/i.test(s)) return false;
+    if (/excel/i.test(key || '')) return false;
     if (/^data:image\//i.test(s)) return true;
     if (IMAGE_URL_RE.test(s)) return true;
-    if (/^https?:\/\//i.test(s) && HOST_HINT_RE.test(s)) return true;
+    if (/^https?:\/\//i.test(s) && HOST_HINT_RE.test(s) && !/\.(xlsx|xls|csv)(\?|$)/i.test(s)) return true;
     if (key && /^(url|image|img|cover|background|output_image|file_url)$/i.test(key) && /^https?:\/\//i.test(s)) {
       return true;
     }
@@ -231,6 +233,9 @@ export type CozeExcelRow = {
   exposureText?: string;
   engagementText?: string;
   videoUrl?: string;
+  coverDataUrl?: string;
+  qrDataUrl?: string;
+  avatarDataUrl?: string;
 };
 
 function strField(obj: Record<string, unknown>, names: string[]): string {
@@ -318,4 +323,87 @@ export async function fetchAsDataUrl(url: string): Promise<string> {
   const ct = resp.headers.get('content-type') || 'image/png';
   const mime = ct.split(';')[0] || 'image/png';
   return `data:${mime};base64,${buf.toString('base64')}`;
+}
+
+export function extractExcelUrl(data: unknown): string | null {
+  const found: string[] = [];
+  const visit = (v: unknown, key?: string, depth = 0) => {
+    if (v == null || depth > 8) return;
+    if (typeof v === 'string') {
+      const s = v.trim();
+      if (!s) return;
+      if ((s.startsWith('{') || s.startsWith('[')) && s.length < 2_000_000) {
+        try {
+          visit(JSON.parse(s), key, depth + 1);
+          return;
+        } catch {
+          /* ignore */
+        }
+      }
+      const isExcelKey = /excel|xlsx|workbook|报表|表格/i.test(key || '');
+      const isExcelUrl = /^https?:\/\//i.test(s) && (/\.(xlsx|xls|csv)(\?|$)/i.test(s) || isExcelKey);
+      if (isExcelUrl) found.push(s);
+      return;
+    }
+    if (Array.isArray(v)) {
+      v.forEach((item) => visit(item, key, depth + 1));
+      return;
+    }
+    if (typeof v === 'object') {
+      for (const [k, val] of Object.entries(v as Record<string, unknown>)) visit(val, k, depth + 1);
+    }
+  };
+  visit(data);
+  return found[0] || null;
+}
+
+export async function fetchExcelBuffer(url: string): Promise<ArrayBuffer> {
+  const resp = await fetch(url, {
+    headers: { Accept: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/octet-stream,*/*' },
+    signal: AbortSignal.timeout(60_000),
+  });
+  if (!resp.ok) throw new Error(`下载工作流 Excel 失败（HTTP ${resp.status}）`);
+  return resp.arrayBuffer();
+}
+
+function isHttpUrl(s: string) {
+  return /^https?:\/\//i.test(s);
+}
+
+export async function hydrateRowImages(rows: CozeExcelRow[]): Promise<CozeExcelRow[]> {
+  const next: CozeExcelRow[] = [];
+  for (const row of rows) {
+    const copy = { ...row };
+    const jobs: Array<Promise<void>> = [];
+    if (row.coverFileName && isHttpUrl(row.coverFileName) && !copy.coverDataUrl) {
+      jobs.push(
+        fetchAsDataUrl(row.coverFileName)
+          .then((u) => {
+            copy.coverDataUrl = u;
+          })
+          .catch(() => undefined),
+      );
+    }
+    if (row.qrFileName && isHttpUrl(row.qrFileName) && !copy.qrDataUrl) {
+      jobs.push(
+        fetchAsDataUrl(row.qrFileName)
+          .then((u) => {
+            copy.qrDataUrl = u;
+          })
+          .catch(() => undefined),
+      );
+    }
+    if (row.avatarFileName && isHttpUrl(row.avatarFileName) && !copy.avatarDataUrl) {
+      jobs.push(
+        fetchAsDataUrl(row.avatarFileName)
+          .then((u) => {
+            copy.avatarDataUrl = u;
+          })
+          .catch(() => undefined),
+      );
+    }
+    if (jobs.length) await Promise.all(jobs);
+    next.push(copy);
+  }
+  return next;
 }

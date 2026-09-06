@@ -7,12 +7,16 @@ import express from 'express';
 import {
   collectCozeMedia,
   excelRowsFromCoze,
+  extractExcelUrl,
   fetchAsDataUrl,
+  fetchExcelBuffer,
+  hydrateRowImages,
   normalizePayload,
   publicCozeConfig,
   readCozeEnv,
   runPublishedWorkflow,
 } from './coze';
+import { parseExcel } from '../src/lib/excel';
 
 dotenv.config();
 
@@ -81,7 +85,18 @@ app.post('/api/coze/run', async (req, res) => {
     });
 
     const media = collectCozeMedia(data);
-    const rows = excelRowsFromCoze(data);
+    let rows = excelRowsFromCoze(data);
+    const excelUrl = extractExcelUrl(data);
+    let excelWarning = '';
+    if (excelUrl) {
+      const buf = await fetchExcelBuffer(excelUrl);
+      const parsed = parseExcel(buf);
+      excelWarning = parsed.warning || '';
+      if (parsed.rows.length) rows = parsed.rows;
+    }
+    if (rows.length) {
+      rows = await hydrateRowImages(rows);
+    }
     let imageDataUrl: string | null = null;
     if (media.imageUrls[0]) {
       try {
@@ -93,9 +108,14 @@ app.post('/api/coze/run', async (req, res) => {
 
     res.json({
       ok: true,
-      text: media.text,
+      text: rows.length
+        ? `已从工作流 Excel 导入 ${rows.length} 行${excelWarning ? `（${excelWarning}）` : ''}`
+        : excelUrl
+          ? `工作流已完成并生成 Excel，但没有数据行。请填写视频链接后再运行。${excelWarning ? ` ${excelWarning}` : ''}`
+          : media.text,
       imageDataUrl,
       imageUrls: media.imageUrls,
+      excelUrl,
       rows,
       data,
     });
