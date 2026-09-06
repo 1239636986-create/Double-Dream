@@ -22,3 +22,4 @@ dist
 
 # 测试产物
 coverage
+*.tsbuildinfo

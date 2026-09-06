@@ -4,6 +4,15 @@ import cors from 'cors';
 import crypto from 'node:crypto';
 import dotenv from 'dotenv';
 import express from 'express';
+import {
+  collectCozeMedia,
+  fetchAsDataUrl,
+  parseDataUrl,
+  publicCozeConfig,
+  readCozeEnv,
+  runCozeWorkflow,
+  uploadCozeFile,
+} from './coze';
 
 dotenv.config();
 
@@ -35,11 +44,98 @@ function stripDataUrl(input: string) {
 }
 
 app.get('/api/health', (_req, res) => {
+  const coze = publicCozeConfig();
   res.json({
     ok: true,
     hasLiblibKeys: Boolean(ACCESS_KEY && SECRET_KEY),
+    hasCoze: coze.configured,
     providers: ['pollinations', 'procedural', ...(ACCESS_KEY && SECRET_KEY ? ['liblib'] : [])],
   });
+});
+
+app.get('/api/coze/config', (_req, res) => {
+  res.json(publicCozeConfig());
+});
+
+app.post('/api/coze/run', async (req, res) => {
+  const env = readCozeEnv();
+  if (!env.token) {
+    res.status(500).json({
+      error: '未配置扣子访问令牌。请在 .env 中填写 COZE_API_TOKEN（个人访问令牌 PAT）。',
+    });
+    return;
+  }
+  if (!env.workflowId) {
+    res.status(500).json({
+      error: '未配置工作流 ID。请在 .env 中填写 COZE_WORKFLOW_ID。',
+    });
+    return;
+  }
+
+  try {
+    const {
+      prompt = '',
+      imageBase64,
+      extraParameters,
+    } = req.body as {
+      prompt?: string;
+      imageBase64?: string;
+      extraParameters?: Record<string, unknown>;
+    };
+
+    const parameters: Record<string, unknown> = { ...(extraParameters || {}) };
+    if (env.textInputKey && String(prompt || '').trim()) {
+      parameters[env.textInputKey] = String(prompt).trim();
+    }
+
+    if (imageBase64 && env.imageInputKey) {
+      const parsed = parseDataUrl(imageBase64);
+      if (!parsed) {
+        res.status(400).json({ error: '主视觉不是有效的图片 data URL' });
+        return;
+      }
+      const fileId = await uploadCozeFile({
+        token: env.token,
+        apiBase: env.apiBase,
+        buffer: parsed.buffer,
+        filename: `main-visual.${parsed.ext}`,
+        mime: parsed.mime,
+      });
+      parameters[env.imageInputKey] = JSON.stringify({ file_id: fileId });
+    } else if (env.requireMainVisual && !imageBase64) {
+      res.status(400).json({ error: '请先上传主视觉，再运行扣子工作流' });
+      return;
+    }
+
+    const result = await runCozeWorkflow({
+      token: env.token,
+      apiBase: env.apiBase,
+      workflowId: env.workflowId,
+      botId: env.botId || undefined,
+      appId: env.appId || undefined,
+      parameters,
+    });
+
+    const media = collectCozeMedia(result.data);
+    let imageDataUrl: string | null = null;
+    if (env.applyImageToBackground && media.imageUrls[0]) {
+      try {
+        imageDataUrl = await fetchAsDataUrl(media.imageUrls[0]);
+      } catch (err) {
+        console.warn('[coze] image fetch failed', err);
+      }
+    }
+
+    res.json({
+      ok: true,
+      text: media.text,
+      imageDataUrl,
+      imageUrls: media.imageUrls,
+      debugUrl: result.debugUrl,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
 });
 
 /** Pollinations FLUX：免密钥，按主视觉配色写 prompt */

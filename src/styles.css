@@ -29,7 +29,8 @@ body,
 
 button,
 input,
-label {
+label,
+textarea {
   font: inherit;
 }
 
@@ -345,6 +346,52 @@ label {
   font-size: 11px;
   margin: 0;
   line-height: 1.45;
+}
+
+.coze-prompt {
+  width: 100%;
+  resize: vertical;
+  min-height: 64px;
+  border: 1px solid var(--border);
+  background: oklch(0 0 0 / 0.22);
+  color: var(--fg);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.coze-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.coze-check input {
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.coze-result {
+  margin: 0;
+  max-height: 180px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 11px;
+  line-height: 1.45;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: oklch(0 0 0 / 0.22);
+}
+
+.coze-debug {
+  font-size: 12px;
+  color: var(--primary);
 }
 
 .info-box {
