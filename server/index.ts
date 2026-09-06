@@ -354,7 +354,11 @@ app.get('/api/proxy-image', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`[poster-tool] API proxy http://127.0.0.1:${PORT}`);
-  console.log('[poster-tool] 默认生图：Pollinations FLUX（免密钥）+ 本地程序化回退');
-});
+export { app };
+
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`[poster-tool] API proxy http://127.0.0.1:${PORT}`);
+    console.log('[poster-tool] 默认生图：Pollinations FLUX（免密钥）+ 本地程序化回退');
+  });
+}

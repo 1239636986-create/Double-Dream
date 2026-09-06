@@ -49,6 +49,21 @@ Token 只放服务端 `.env` 的 `COZE_API_TOKEN`（对应示例里 `Bearer <YOU
 
 若工作流输出是账号/标题/链接等列表，会自动写入画板卡片；若返回 `excel_url`，会下载该 Excel 并按「所属账号 / 视频标题 / 封面图URL」等列导入。同步超过约 5 分钟时会自动改走 `/async_run` 并轮询任务。
 
+## 更新 Vercel 分享链接
+
+对外固定地址是 **https://double-dream.vercel.app**（跟 `main` 分支走）。当前线上还是合并前的版本；这次扣子按钮在分支 `cursor/coze-workflow-button-1bb0`。
+
+要让分享链接展示最新成果：
+
+1. 把 PR 合并进 `main`：https://github.com/1239636986-create/Double-Dream/pull/1  
+   GitHub 已连接 Vercel 时，合并后会自动重新部署生产环境，`https://double-dream.vercel.app` 会换成新页面。
+2. 在 [Vercel 项目 Settings → Environment Variables](https://vercel.com/meng-1855/double-dream/settings/environment-variables) 添加：
+   - `COZE_API_TOKEN`：扣子部署页生成的 Token（勾选 Production）
+   - `COZE_RUN_URL`：`https://sxk7m33ft7.coze.site/run`（可选，代码里已有默认值）
+3. 若合并后页面还是旧的，到 Vercel 点 **Redeploy** 一次，并硬刷新浏览器。
+
+不要把 Token 写进仓库。预览部署若打开要登录，是 Vercel Deployment Protection，不影响已公开的 `double-dream.vercel.app`。
+
 ## 画板默认（PRD）
 
 - 画板宽 **1242**，单屏高 **2208**，高度随卡片延伸
