@@ -121,7 +121,7 @@ async function pollAsyncTask(opts: {
 export async function runPublishedWorkflow(opts: {
   token: string;
   runUrl: string;
-  payload: CozeRunPayload;
+  payload: Record<string, unknown> | CozeRunPayload;
 }): Promise<unknown> {
   const base = cozeServiceBase(opts.runUrl);
   try {

@@ -16,6 +16,7 @@ import {
   readCozeEnv,
   runPublishedWorkflow,
 } from './coze';
+import { normalizeVoicePayload, parseVoiceWorkflowResult } from './cozeVoice';
 import { parseExcel } from '../src/lib/excel';
 
 dotenv.config();
@@ -58,7 +59,57 @@ app.get('/api/health', (_req, res) => {
 });
 
 app.get('/api/coze/config', (_req, res) => {
-  res.json(publicCozeConfig());
+  res.json({
+    ...publicCozeConfig(),
+    voice: {
+      endpoint: '/api/coze/voice',
+      bodyParams: ['article_content', 'article_title', 'user_question'],
+    },
+  });
+});
+
+/** 元宝语音 / 公众号文本工作流 */
+app.post('/api/coze/voice', async (req, res) => {
+  const env = readCozeEnv();
+  if (!env.token) {
+    res.status(500).json({
+      error:
+        '未配置扣子 API Token。请在仓库根目录 .env 填写 COZE_API_TOKEN（扣子部署页「管理 API Token」生成，勿贴到聊天或前端）。',
+    });
+    return;
+  }
+
+  try {
+    const payload = normalizeVoicePayload({
+      article_content: req.body?.article_content,
+      article_title: req.body?.article_title,
+      user_question: req.body?.user_question,
+    });
+    if (!payload.article_content && !payload.user_question) {
+      res.status(400).json({ error: '请至少提供 article_content 或 user_question' });
+      return;
+    }
+
+    const data = await runPublishedWorkflow({
+      token: env.token,
+      runUrl: env.runUrl,
+      payload,
+    });
+    const media = collectCozeMedia(data);
+    const parsed = parseVoiceWorkflowResult(data, media.text);
+
+    res.json({
+      ok: true,
+      replyText: parsed.replyText,
+      cards: parsed.cards,
+      settlement: parsed.settlement,
+      text: parsed.replyText,
+      data,
+      runUrl: env.runUrl,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
 });
 
 app.post('/api/coze/run', async (req, res) => {

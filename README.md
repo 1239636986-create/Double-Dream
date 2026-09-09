@@ -4,21 +4,19 @@
 
 ## 元宝 · Content to Voice Demo（当前默认）
 
-**现在 `npm run dev` / 右侧预览默认打开的是元宝原型**，不再是海报工具。
+**现在 `npm run dev` 默认打开元宝原型**（5173），并同时启动扣子 API 代理（8787）。
 
-```bash
-npm install
-npm run dev
-# → http://127.0.0.1:5173  元宝 Content to Voice
-```
+### 接入你在扣子部署的「文本工作流」
 
-海报工具仍保留，需要时用：
+1. 扣子部署页 → **管理 API Token** → 生成  
+2. `cp .env.example .env`，填写 `COZE_API_TOKEN`（勿提交、勿发聊天）  
+3. `COZE_RUN_URL` 保持 `https://sxk7m33ft7.coze.site/run`（与部署页 curl 一致）  
+4. `npm run dev` → 打开 http://127.0.0.1:5173  
+5. 左侧显示「扣子已连接」后，点「发给元宝」即可调工作流  
 
-```bash
-npm run dev:poster
-```
+入参：`article_content` / `article_title` / `user_question`（见 `POST /api/coze/voice`）。
 
-原型目录：`content-to-voice-demo/`
+海报工具仍可用：`npm run dev:poster`
 
 ---
 

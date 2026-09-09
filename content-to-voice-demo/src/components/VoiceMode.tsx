@@ -1,15 +1,27 @@
 import { useEffect, useState } from "react";
+import type { Article } from "../data/articles";
 import { voiceScript, type VoiceTurn } from "../data/dialogue";
 import { useSpeech } from "../hooks/useSpeech";
+import { articleFullText } from "../lib/articleText";
+import { runCozeVoice } from "../lib/cozeVoiceClient";
 
 type Props = {
+  article: Article;
+  cozeReady: boolean;
   onClose: () => void;
   onFinish: () => void;
+  onCozeSettlement?: (items: Array<{ type: string; title: string; detail: string }>) => void;
 };
 
 type Phase = "idle" | "holding" | "user-done" | "ai-speaking" | "done";
 
-export function VoiceMode({ onClose, onFinish }: Props) {
+export function VoiceMode({
+  article,
+  cozeReady,
+  onClose,
+  onFinish,
+  onCozeSettlement,
+}: Props) {
   const [phase, setPhase] = useState<Phase>("idle");
   const [turns, setTurns] = useState<VoiceTurn[]>([]);
   const [step, setStep] = useState(0);
@@ -31,10 +43,12 @@ export function VoiceMode({ onClose, onFinish }: Props) {
 
   const statusDesc =
     phase === "done"
-      ? "已覆盖热不适关联与下一步用法。可沉淀为有效信息。"
-      : supported
-        ? "演示会按脚本推进一轮完整对话；真实场景可接 ASR / TTS。"
-        : "当前环境不支持系统朗读，仍可走完演示流程。";
+      ? "可沉淀为有效信息。"
+      : cozeReady
+        ? "已连接扣子工作流：松手后会把你的话发给元宝语音工作流。"
+        : supported
+          ? "演示脚本模式（未配置 Token）。配置后走真实扣子回复。"
+          : "当前环境不支持系统朗读，仍可走完演示流程。";
 
   const startHold = () => {
     if (phase === "ai-speaking" || phase === "done") return;
@@ -51,23 +65,43 @@ export function VoiceMode({ onClose, onFinish }: Props) {
     setTurns((prev) => [...prev, userTurn]);
     setPhase("user-done");
     const nextIndex = step + 1;
-    const aiTurn = voiceScript[nextIndex];
-    window.setTimeout(() => {
-      if (!aiTurn || aiTurn.speaker !== "yuanbao") {
-        setStep(nextIndex);
-        setPhase(nextIndex >= voiceScript.length ? "done" : "idle");
-        return;
+
+    void (async () => {
+      let aiText = voiceScript[nextIndex]?.transcript || "好的，我记下了。";
+      if (cozeReady) {
+        try {
+          const result = await runCozeVoice({
+            article_title: article.title,
+            article_content: articleFullText(article),
+            user_question: userTurn.transcript,
+          });
+          aiText = result.replyText || aiText;
+          if (result.settlement.length) onCozeSettlement?.(result.settlement);
+        } catch {
+          /* keep script fallback */
+        }
+      } else {
+        await new Promise((r) => setTimeout(r, 450));
+        const scriptAi = voiceScript[nextIndex];
+        if (scriptAi?.speaker === "yuanbao") aiText = scriptAi.transcript;
       }
+
+      const aiTurn: VoiceTurn = {
+        id: `ai-${Date.now()}`,
+        speaker: "yuanbao",
+        transcript: aiText,
+        duration: "0:12",
+      };
       setTurns((prev) => [...prev, aiTurn]);
       setPhase("ai-speaking");
-      setStep(nextIndex + 1);
-      speak(aiTurn.transcript, {
+      setStep(Math.min(nextIndex + 1, voiceScript.length));
+      speak(aiText, {
         onEnd: () => {
           const finished = nextIndex + 1 >= voiceScript.length;
           setPhase(finished ? "done" : "idle");
         },
       });
-    }, 450);
+    })();
   };
 
   const autoPlayRest = () => {

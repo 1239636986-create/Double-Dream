@@ -4,21 +4,28 @@ import {
   initialChatSeed,
   summaryReply,
   type ChatMessage,
+  type SummaryCard,
 } from "../data/dialogue";
+import { articleFullText } from "../lib/articleText";
+import { runCozeVoice } from "../lib/cozeVoiceClient";
 
 type Props = {
   article: Article;
+  cozeReady: boolean;
   onBack: () => void;
   onOpenVoice: () => void;
   onOpenSettlement: () => void;
+  onCozeSettlement?: (items: Array<{ type: string; title: string; detail: string }>) => void;
   autoSummarize?: boolean;
 };
 
 export function YuanbaoChat({
   article,
+  cozeReady,
   onBack,
   onOpenVoice,
   onOpenSettlement,
+  onCozeSettlement,
   autoSummarize = true,
 }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>(() =>
@@ -27,6 +34,7 @@ export function YuanbaoChat({
   const [typing, setTyping] = useState(false);
   const [input, setInput] = useState("");
   const [voiceModeHint, setVoiceModeHint] = useState(false);
+  const [status, setStatus] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
   const summarized = useRef(false);
 
@@ -37,14 +45,60 @@ export function YuanbaoChat({
   useEffect(() => {
     if (!autoSummarize || summarized.current) return;
     summarized.current = true;
-    setTyping(true);
-    const t = window.setTimeout(() => {
-      setTyping(false);
-      setMessages((prev) => [...prev, summaryReply]);
-      setVoiceModeHint(true);
-    }, 1100);
-    return () => window.clearTimeout(t);
-  }, [autoSummarize]);
+    void (async () => {
+      setTyping(true);
+      setStatus(cozeReady ? "正在调用扣子工作流总结…" : "演示模式（未配置 Token）");
+      try {
+        if (cozeReady) {
+          const result = await runCozeVoice({
+            article_title: article.title,
+            article_content: articleFullText(article),
+            user_question: "这个说了什么？请总结核心要点，并给出研究切入点。",
+          });
+          const cards: SummaryCard[] =
+            result.cards.length > 0
+              ? result.cards.map((c, i) => ({
+                  id: `coze-${i}`,
+                  title: c.title,
+                  body: c.body,
+                  badge: "元来是这样",
+                }))
+              : [
+                  {
+                    id: "coze-reply",
+                    title: "元宝总结",
+                    body: result.replyText,
+                    badge: "元来是这样",
+                  },
+                ];
+          setMessages((prev) => [
+            ...prev,
+            { id: `m-coze-${Date.now()}`, role: "assistant", kind: "summary-cards", cards },
+          ]);
+          if (result.settlement.length) onCozeSettlement?.(result.settlement);
+        } else {
+          await new Promise((r) => setTimeout(r, 800));
+          setMessages((prev) => [...prev, summaryReply]);
+        }
+        setVoiceModeHint(true);
+      } catch (err) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `err-${Date.now()}`,
+            role: "assistant",
+            kind: "text",
+            text: `扣子调用失败：${err instanceof Error ? err.message : String(err)}。已回退演示卡片。`,
+          },
+          summaryReply,
+        ]);
+        setVoiceModeHint(true);
+      } finally {
+        setTyping(false);
+        setStatus("");
+      }
+    })();
+  }, [article, autoSummarize, cozeReady, onCozeSettlement]);
 
   const sendText = (text: string) => {
     const trimmed = text.trim();
@@ -55,24 +109,65 @@ export function YuanbaoChat({
     ]);
     setInput("");
     setTyping(true);
-    window.setTimeout(() => {
-      setTyping(false);
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `a-${Date.now()}`,
-          role: "assistant",
-          kind: "text",
-          text: "可以。点下方「语音交流」，边听边聊；聊完后我会帮你沉淀成洞察、动作和待办。",
-        },
-        {
-          id: `a2-${Date.now()}`,
-          role: "assistant",
-          kind: "settlement-teaser",
-          text: "对话结束后可一键整理有效信息",
-        },
-      ]);
-    }, 800);
+    setStatus(cozeReady ? "扣子思考中…" : "演示回复中…");
+
+    void (async () => {
+      try {
+        if (cozeReady) {
+          const result = await runCozeVoice({
+            article_title: article.title,
+            article_content: articleFullText(article),
+            user_question: trimmed,
+          });
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: `a-${Date.now()}`,
+              role: "assistant",
+              kind: "text",
+              text: result.replyText,
+            },
+            {
+              id: `a2-${Date.now()}`,
+              role: "assistant",
+              kind: "settlement-teaser",
+              text: "需要的话，我可以把对话沉淀成洞察 / 动作 / 待办",
+            },
+          ]);
+          if (result.settlement.length) onCozeSettlement?.(result.settlement);
+        } else {
+          await new Promise((r) => setTimeout(r, 700));
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: `a-${Date.now()}`,
+              role: "assistant",
+              kind: "text",
+              text: "可以。点下方「语音交流」，边听边聊；聊完后我会帮你沉淀成洞察、动作和待办。（配置 COZE_API_TOKEN 后这里会走真实扣子工作流）",
+            },
+            {
+              id: `a2-${Date.now()}`,
+              role: "assistant",
+              kind: "settlement-teaser",
+              text: "对话结束后可一键整理有效信息",
+            },
+          ]);
+        }
+      } catch (err) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `a-${Date.now()}`,
+            role: "assistant",
+            kind: "text",
+            text: `调用失败：${err instanceof Error ? err.message : String(err)}`,
+          },
+        ]);
+      } finally {
+        setTyping(false);
+        setStatus("");
+      }
+    })();
   };
 
   return (
@@ -94,6 +189,7 @@ export function YuanbaoChat({
 
       <div className="scroll-area chat-messages">
         <div className="time-chip">下午 1:34</div>
+        {status && <div className="time-chip">{status}</div>}
         {messages.map((msg) => (
           <MessageView key={msg.id} msg={msg} onSettlement={onOpenSettlement} />
         ))}

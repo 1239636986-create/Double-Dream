@@ -4,7 +4,8 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "npm run dev --prefix content-to-voice-demo",
+    "dev": "concurrently -k \"npm:dev:server\" \"npm:dev:yuanbao\"",
+    "dev:yuanbao": "npm run dev --prefix content-to-voice-demo",
     "dev:poster": "concurrently -k \"npm:dev:server\" \"npm:dev:client\"",
     "dev:client": "vite",
     "dev:server": "tsx watch server/index.ts",

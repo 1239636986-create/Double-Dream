@@ -1,38 +1,55 @@
 # 元宝语音交互 · Content to Voice Demo
 
-基于微信公众号阅读场景的交互演示：更好朗读、语音交流想法、对话后有效信息沉淀。
+基于微信公众号阅读场景的交互演示，并接入扣子（Coze）已部署的「文本工作流」。
 
-> 说明：云端未拿到你本机的 `元宝语音交互_ContentToVoice_Demo_PRD.md`，本 Demo 按你描述的三大目标与参考截图实现。若 PRD 有更细流程/文案，可继续迭代对齐。
+## 如何把扣子工作流接到这个 Demo
+
+你截图里的部署已经成功，接口是：
+
+- **URL**：`POST https://sxk7m33ft7.coze.site/run`
+- **Body**：`article_content`（公众号文章全文）、`article_title`、`user_question`
+- **鉴权**：`Authorization: Bearer <API Token>`
+
+### 操作步骤（必做）
+
+1. 打开扣子 **部署** 页 → **管理 API Token** → 生成 Token  
+2. 在仓库**根目录**执行：
+   ```bash
+   cp .env.example .env
+   ```
+3. 编辑 `.env`（**不要把 Token 发到聊天或提交到 Git**）：
+   ```bash
+   COZE_API_TOKEN=你的Token
+   COZE_RUN_URL=https://sxk7m33ft7.coze.site/run
+   ```
+4. 启动（前端 5173 + 后端 8787）：
+   ```bash
+   npm install
+   npm install --prefix content-to-voice-demo
+   npm run dev
+   ```
+5. 打开 http://127.0.0.1:5173  
+   - 左侧显示「扣子已连接」= 成功  
+   - 点「发给元宝」→ 总结会走 `/api/coze/voice` 调你的工作流  
+
+### 线上（Vercel）
+
+在 Vercel 项目 Environment Variables 增加同样的：
+
+- `COZE_API_TOKEN`
+- `COZE_RUN_URL`（可选，默认已是上述地址）
+
+并保证构建使用 `content-to-voice-demo`（本分支 `vercel.json` 已配置）。  
+注意：Vercel Serverless 需要把 `/api/coze/voice` 一并部署；当前根目录 `api/index.ts` 若只代理海报能力，本地请用 `npm run dev` 验证。
 
 ## 场景对应
 
-| PRD 目标 | Demo 入口 |
+| 目标 | Demo |
 | --- | --- |
-| 公众号更好朗读 | 文章页「听全文」、更多面板「听全文 / 稍后听」、底部迷你播放条 |
-| 语音交流想法 | 转发「元宝」→ 聊天 →「语音交流」按住说话 |
-| 沉淀有效信息 | 语音结束后进入「信息沉淀」：洞察 / 金句 / 动作 / 待办 |
+| 更好朗读 | 听全文 / 稍后听 |
+| 语音交流 | 元宝聊天 + 按住说话（有 Token 时调扣子） |
+| 信息沉淀 | 沉淀页；可「用扣子重新沉淀」 |
 
-## 启动
+## 未配置 Token 时
 
-```bash
-cd content-to-voice-demo
-npm install
-npm run dev
-```
-
-浏览器打开终端提示的地址（默认 `http://127.0.0.1:5174`）。
-
-## 推荐体验路径
-
-1. 在手机框内打开公众号文章 → 点「听全文」或右上角 `···`
-2. 在分享面板点「元宝」或底部「发给元宝」
-3. 聊天里看总结卡片 → 点「语音交流想法」完成一轮对话
-4. 进入「信息沉淀」查看整理结果
-
-左侧步骤导航可随时跳转。支持系统中文 TTS 的浏览器会真实朗读；否则仍可走完流程。
-
-## 技术
-
-- Vite + React + TypeScript
-- Web Speech API（`speechSynthesis`）做听全文 / 元宝语音回复
-- 纯前端 Mock，无需后端与登录
+仍可点通全部 UI，使用本地 Mock 文案。

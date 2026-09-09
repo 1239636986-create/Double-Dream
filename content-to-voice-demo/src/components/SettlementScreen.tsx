@@ -1,19 +1,33 @@
-import { settlementItems } from "../data/dialogue";
+import { settlementItems, type SettlementItem } from "../data/dialogue";
 
 type Props = {
   articleTitle: string;
+  items?: SettlementItem[];
+  cozeReady?: boolean;
   onBack: () => void;
   onRestart: () => void;
+  onRefreshFromCoze?: () => void;
+  refreshing?: boolean;
 };
 
-const typeLabel = {
+const typeLabel: Record<string, string> = {
   insight: "INSIGHT",
   quote: "QUOTE",
   action: "ACTION",
   todo: "TODO",
-} as const;
+};
 
-export function SettlementScreen({ articleTitle, onBack, onRestart }: Props) {
+export function SettlementScreen({
+  articleTitle,
+  items,
+  cozeReady,
+  onBack,
+  onRestart,
+  onRefreshFromCoze,
+  refreshing,
+}: Props) {
+  const list = items?.length ? items : settlementItems;
+
   return (
     <div className="screen settlement-screen">
       <div className="nav-bar">
@@ -31,14 +45,15 @@ export function SettlementScreen({ articleTitle, onBack, onRestart }: Props) {
           <div className="eyebrow">VOICE → NOTES</div>
           <h2>语音对话后的有效信息整理</h2>
           <p>
-            基于《{articleTitle}》的朗读与一轮语音交流，自动沉淀洞察、金句、动作与待办，避免聊完就散。
+            基于《{articleTitle}》
+            {cozeReady ? "，由扣子工作流 / 对话结果整理。" : "（演示数据；配置 Token 后可走扣子生成）。"}
           </p>
         </div>
 
         <div className="settlement-list">
-          {settlementItems.map((item) => (
+          {list.map((item) => (
             <article key={item.id} className={`settle-card ${item.type}`}>
-              <div className="type">{typeLabel[item.type]}</div>
+              <div className="type">{typeLabel[item.type] || item.type.toUpperCase()}</div>
               <h3>{item.title}</h3>
               <p>{item.detail}</p>
             </article>
@@ -50,9 +65,15 @@ export function SettlementScreen({ articleTitle, onBack, onRestart }: Props) {
         <button className="dock-btn" onClick={onBack}>
           回到对话
         </button>
-        <button className="dock-btn primary" onClick={onRestart}>
-          再走一遍流程
-        </button>
+        {cozeReady && onRefreshFromCoze ? (
+          <button className="dock-btn primary" onClick={onRefreshFromCoze} disabled={refreshing}>
+            {refreshing ? "生成中…" : "用扣子重新沉淀"}
+          </button>
+        ) : (
+          <button className="dock-btn primary" onClick={onRestart}>
+            再走一遍流程
+          </button>
+        )}
       </div>
     </div>
   );

@@ -7,8 +7,14 @@ import { SettlementScreen } from "./components/SettlementScreen";
 import { VoiceMode } from "./components/VoiceMode";
 import { YuanbaoChat } from "./components/YuanbaoChat";
 import { demoArticle } from "./data/articles";
-import { listenLaterHint } from "./data/dialogue";
+import { listenLaterHint, type SettlementItem } from "./data/dialogue";
 import { useSpeech } from "./hooks/useSpeech";
+import { articleFullText } from "./lib/articleText";
+import {
+  fetchCozeVoiceConfig,
+  runCozeVoice,
+  type CozeVoiceConfig,
+} from "./lib/cozeVoiceClient";
 import "./styles/app.css";
 
 type Screen = "article" | "chat" | "settlement";
@@ -31,14 +37,31 @@ const steps = [
   },
 ] as const;
 
+function mapSettlement(
+  items: Array<{ type: string; title: string; detail: string }>,
+): SettlementItem[] {
+  return items.map((item, i) => ({
+    id: `coze-s-${i}`,
+    type: (["insight", "quote", "action", "todo"].includes(item.type)
+      ? item.type
+      : "insight") as SettlementItem["type"],
+    title: item.title,
+    detail: item.detail,
+  }));
+}
+
 export default function App() {
   const [screen, setScreen] = useState<Screen>("article");
   const [sheetOpen, setSheetOpen] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [showPlayer, setShowPlayer] = useState(false);
+  const [coze, setCoze] = useState<CozeVoiceConfig | null>(null);
+  const [settlementItems, setSettlementItems] = useState<SettlementItem[] | undefined>();
+  const [refreshing, setRefreshing] = useState(false);
   const { speaking, speak, stop, supported, lineIndex, lineTotal } = useSpeech();
 
+  const cozeReady = Boolean(coze?.configured);
   const listening = speaking;
   const script = demoArticle.listenScript;
 
@@ -83,8 +106,56 @@ export default function App() {
     setScreen("chat");
   };
 
+  const onCozeSettlement = useCallback(
+    (items: Array<{ type: string; title: string; detail: string }>) => {
+      if (items.length) setSettlementItems(mapSettlement(items));
+    },
+    [],
+  );
+
+  const refreshSettlement = useCallback(async () => {
+    if (!cozeReady) return;
+    setRefreshing(true);
+    try {
+      const result = await runCozeVoice({
+        article_title: demoArticle.title,
+        article_content: articleFullText(demoArticle),
+        user_question:
+          "请把刚才对话沉淀为有效信息整理，输出 insight / quote / action / todo 条目（JSON 数组更好）。",
+      });
+      if (result.settlement.length) {
+        setSettlementItems(mapSettlement(result.settlement));
+      } else if (result.replyText) {
+        setSettlementItems([
+          {
+            id: "coze-single",
+            type: "insight",
+            title: "工作流整理结果",
+            detail: result.replyText,
+          },
+        ]);
+      }
+      showToast("已用扣子重新沉淀");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : String(err));
+    } finally {
+      setRefreshing(false);
+    }
+  }, [cozeReady, showToast]);
+
   const activeStep =
     screen === "settlement" ? "settle" : screen === "chat" ? "talk" : "read";
+
+  useEffect(() => {
+    const load = () => {
+      void fetchCozeVoiceConfig()
+        .then(setCoze)
+        .catch(() => setCoze(null));
+    };
+    load();
+    window.addEventListener("focus", load);
+    return () => window.removeEventListener("focus", load);
+  }, []);
 
   useEffect(() => {
     return () => stop();
@@ -104,8 +175,31 @@ export default function App() {
         <div className="side-copy">
           <h2>让长文不只是「看完」，而是「听懂、聊透、留住」</h2>
           <p>
-            参考微信公众号阅读与分享面板，演示元宝如何承接文章：先听全文，再语音交换想法，最后把对话沉淀成可执行笔记。
+            已对接你在扣子部署的文本工作流（article_content / article_title /
+            user_question）。配置 Token 后，聊天与语音会走真实工作流。
           </p>
+        </div>
+
+        <div className={`coze-box ${cozeReady ? "ok" : "warn"}`}>
+          <strong>{cozeReady ? "扣子已连接" : "待配置 COZE_API_TOKEN"}</strong>
+          <ol>
+            <li>打开扣子「部署」页 → 管理 API Token → 生成 Token</li>
+            <li>
+              仓库根目录复制 <code>.env.example</code> 为 <code>.env</code>，填入 Token（不要发到聊天）
+            </li>
+            <li>
+              确认 <code>COZE_RUN_URL=https://sxk7m33ft7.coze.site/run</code>
+            </li>
+            <li>
+              运行 <code>npm run dev</code>（会同时起前端 5173 + 后端 8787）
+            </li>
+            <li>回到本页点「发给元宝」验证总结是否来自工作流</li>
+          </ol>
+          {coze?.runUrl && (
+            <p className="coze-url">
+              当前：<code>{coze.runUrl}</code>
+            </p>
+          )}
         </div>
 
         <ul className="flow-list">
@@ -177,6 +271,7 @@ export default function App() {
         {screen === "chat" && (
           <YuanbaoChat
             article={demoArticle}
+            cozeReady={cozeReady}
             onBack={() => {
               setVoiceOpen(false);
               setScreen("article");
@@ -186,12 +281,17 @@ export default function App() {
               setVoiceOpen(false);
               setScreen("settlement");
             }}
+            onCozeSettlement={onCozeSettlement}
           />
         )}
 
         {screen === "settlement" && (
           <SettlementScreen
             articleTitle={demoArticle.title}
+            items={settlementItems}
+            cozeReady={cozeReady}
+            refreshing={refreshing}
+            onRefreshFromCoze={refreshSettlement}
             onBack={() => setScreen("chat")}
             onRestart={() => {
               stopListen();
@@ -234,6 +334,9 @@ export default function App() {
 
         {screen === "chat" && voiceOpen && (
           <VoiceMode
+            article={demoArticle}
+            cozeReady={cozeReady}
+            onCozeSettlement={onCozeSettlement}
             onClose={() => {
               stop();
               setVoiceOpen(false);

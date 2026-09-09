@@ -210,6 +210,50 @@ button:disabled {
   font-weight: 600;
 }
 
+.coze-box {
+  border-radius: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.coze-box.ok {
+  border-color: rgba(25, 195, 125, 0.4);
+  background: rgba(25, 195, 125, 0.08);
+}
+
+.coze-box.warn {
+  border-color: rgba(255, 159, 10, 0.4);
+  background: rgba(255, 159, 10, 0.08);
+}
+
+.coze-box strong {
+  display: block;
+  color: var(--text);
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.coze-box ol {
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.coze-box code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  color: #d7ffe9;
+}
+
+.coze-url {
+  margin-top: 8px;
+  word-break: break-all;
+}
+
 .phone-frame {
   width: min(100%, var(--phone-width));
   height: min(92vh, var(--phone-height));
