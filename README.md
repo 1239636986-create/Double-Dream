@@ -2,21 +2,21 @@
 
 基于 PRD v1.7 的本机 Web 工具。界面布局对齐 `../code` 交互稿：顶栏八步导航、左侧图标栏、参数面板、画布工作区、右侧图层。
 
-## 元宝 · Content to Voice Demo（当前默认）
+## 元宝 · Content to Voice Demo（同仓库子项目）
 
-**现在 `npm run dev` 默认打开元宝原型**（5173），并同时启动扣子 API 代理（8787）。
+元宝原型在目录 `content-to-voice-demo/`，**不会**替换 Vercel 主站。
 
-### 接入你在扣子部署的「文本工作流」
+- 主站（海报工具）：https://double-dream.vercel.app  
+- 本地跑元宝：`npm run dev:yuanbao` → http://127.0.0.1:5173  
+
+### 接入扣子「文本工作流」（元宝）
 
 1. 扣子部署页 → **管理 API Token** → 生成  
-2. `cp .env.example .env`，填写 `COZE_API_TOKEN`（勿提交、勿发聊天）  
-3. `COZE_RUN_URL` 保持 `https://sxk7m33ft7.coze.site/run`（与部署页 curl 一致）  
-4. `npm run dev` → 打开 http://127.0.0.1:5173  
-5. 左侧显示「扣子已连接」后，点「发给元宝」即可调工作流  
+2. `cp .env.example .env`，填写 `COZE_API_TOKEN`  
+3. `COZE_RUN_URL` 保持 `https://sxk7m33ft7.coze.site/run`  
+4. `npm run dev:yuanbao`  
 
 入参：`article_content` / `article_title` / `user_question`（见 `POST /api/coze/voice`）。
-
-海报工具仍可用：`npm run dev:poster`
 
 ---
 

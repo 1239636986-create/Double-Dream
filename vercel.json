@@ -1,10 +1,6 @@
 {
-  "installCommand": "npm install && npm install --prefix content-to-voice-demo",
-  "buildCommand": "npm run build --prefix content-to-voice-demo",
-  "outputDirectory": "content-to-voice-demo/dist",
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api" },
-    { "source": "/((?!api/).*)", "destination": "/index.html" }
+    { "source": "/api/(.*)", "destination": "/api" }
   ],
   "functions": {
     "api/index.ts": {
