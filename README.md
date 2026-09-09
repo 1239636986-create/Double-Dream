@@ -2,17 +2,23 @@
 
 基于 PRD v1.7 的本机 Web 工具。界面布局对齐 `../code` 交互稿：顶栏八步导航、左侧图标栏、参数面板、画布工作区、右侧图层。
 
-## 元宝 · Content to Voice Demo（新增）
+## 元宝 · Content to Voice Demo（当前默认）
 
-公众号朗读 / 语音交流 / 信息沉淀的可交互演示，见目录 `content-to-voice-demo/`：
+**现在 `npm run dev` / 右侧预览默认打开的是元宝原型**，不再是海报工具。
 
 ```bash
-cd content-to-voice-demo
 npm install
 npm run dev
+# → http://127.0.0.1:5173  元宝 Content to Voice
 ```
 
-默认打开 http://127.0.0.1:5174
+海报工具仍保留，需要时用：
+
+```bash
+npm run dev:poster
+```
+
+原型目录：`content-to-voice-demo/`
 
 ---
 
