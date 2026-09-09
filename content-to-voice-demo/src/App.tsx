@@ -87,12 +87,18 @@ export default function App() {
     setSheetOpen(false);
     setShowPlayer(true);
     if (!supported) {
-      showToast("当前浏览器不支持语音合成，已模拟听全文状态");
+      showToast("当前环境无系统朗读，已进入听全文演示状态");
       return;
     }
-    speak(script, {
-      onEnd: () => setShowPlayer(false),
-    });
+    try {
+      speak(script, {
+        onEnd: () => {
+          /* keep player visible so user can replay */
+        },
+      });
+    } catch {
+      showToast("朗读启动失败，仍可继续发给元宝");
+    }
   }, [script, showToast, speak, supported]);
 
   const toggleListen = () => {

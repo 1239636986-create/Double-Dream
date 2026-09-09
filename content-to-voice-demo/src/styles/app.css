@@ -279,6 +279,7 @@ button:disabled {
   background: #000;
   border-radius: 20px;
   z-index: 20;
+  pointer-events: none;
 }
 
 .status-bar {
