@@ -2,6 +2,20 @@
 
 基于 PRD v1.7 的本机 Web 工具。界面布局对齐 `../code` 交互稿：顶栏八步导航、左侧图标栏、参数面板、画布工作区、右侧图层。
 
+## 元宝 · Content to Voice Demo（新增）
+
+公众号朗读 / 语音交流 / 信息沉淀的可交互演示，见目录 `content-to-voice-demo/`：
+
+```bash
+cd content-to-voice-demo
+npm install
+npm run dev
+```
+
+默认打开 http://127.0.0.1:5174
+
+---
+
 ## 环境要求
 
 - Node.js 18+
